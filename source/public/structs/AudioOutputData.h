@@ -18,6 +18,9 @@ struct AudioOutputData
     QString                  ActiveProfileId;
     QList<VolumeProfileData> Profiles;
     QDateTime                LastSeen;
+    // Removed by the user: hidden from the list, profiles/hotkeys ignored,
+    // stays removed when the device reconnects. Restorable.
+    bool                     Removed = false;
 
     // Runtime only, not persisted
     bool Online    = false;
@@ -43,6 +46,7 @@ struct AudioOutputData
             { "name",            OutputName },
             { "activeProfileId", ActiveProfileId },
             { "lastSeen",        LastSeen.toString(Qt::ISODate) },
+            { "removed",         Removed },
             { "profiles",        profiles }
         };
     }
@@ -54,6 +58,7 @@ struct AudioOutputData
         output.OutputName      = obj.value("name").toString();
         output.ActiveProfileId = obj.value("activeProfileId").toString();
         output.LastSeen        = QDateTime::fromString(obj.value("lastSeen").toString(), Qt::ISODate);
+        output.Removed         = obj.value("removed").toBool(false);
 
         for (const auto& profile : obj.value("profiles").toArray())
             output.Profiles.append(VolumeProfileData::fromJson(profile.toObject()));

@@ -47,6 +47,10 @@ class AudioMixerController : public QObject
     Q_PROPERTY(QString currentProfileHotkeyError READ currentProfileHotkeyError NOTIFY currentProfileChanged)
     Q_PROPERTY(int activeProfileIndex READ activeProfileIndex NOTIFY activeProfileChanged)
 
+    // Output list shows the removed outputs instead of the regular ones
+    Q_PROPERTY(bool showRemoved READ showRemoved WRITE setShowRemoved NOTIFY showRemovedChanged)
+    Q_PROPERTY(int removedCount READ removedCount NOTIFY removedCountChanged)
+
     Q_PROPERTY(bool editMode READ editMode NOTIFY editModeChanged)
     Q_PROPERTY(bool editDirty READ editDirty NOTIFY editDirtyChanged)
     Q_PROPERTY(QString configPath READ configPath CONSTANT)
@@ -70,6 +74,10 @@ public:
     [[nodiscard]] QString currentProfileHotkeyError() const;
     [[nodiscard]] int activeProfileIndex() const;
 
+    [[nodiscard]] bool showRemoved() const { return isShowingRemoved; }
+    void setShowRemoved(bool show);
+    [[nodiscard]] int removedCount() const;
+
     [[nodiscard]] bool editMode() const { return isEditMode; }
     [[nodiscard]] bool editDirty() const { return isEditDirty; }
     [[nodiscard]] QString configPath() const;
@@ -79,7 +87,13 @@ public:
     [[nodiscard]] const AudioOutputData* currentOutputData() const;
     [[nodiscard]] const VolumeProfileData* currentProfileData() const;
 
+    // Output indexes are the model's "idx" role (index in outputsData())
     Q_INVOKABLE void selectOutput(int index);
+    // Hide an output: its profiles and hotkeys stop working, apps on it get
+    // their full volume back. Not available in edit mode.
+    Q_INVOKABLE void removeOutput(int index);
+    Q_INVOKABLE void restoreOutput(int index);
+    // Delete a removed, disconnected output with all its profiles for good
     Q_INVOKABLE void forgetOutput(int index);
 
     Q_INVOKABLE void selectProfile(int index);
@@ -113,6 +127,8 @@ signals:
     void currentProfileChanged();
     void activeProfileChanged();
     void editModeChanged();
+    void showRemovedChanged();
+    void removedCountChanged();
     void editDirtyChanged();
 
     // ---- Backend hooks ----
@@ -121,6 +137,8 @@ signals:
     void outputConnected(const QString &outputId);
     void outputDisconnected(const QString &outputId);
     void outputForgotten(const QString &outputId);
+    void outputRemoved(const QString &outputId);
+    void outputRestored(const QString &outputId);
 
     void profileAdded(const QString &outputId, const QString &profileId);
     void profileRemoved(const QString &outputId, const QString &profileId);
@@ -166,6 +184,12 @@ protected:
     void finishEdit();
 
     void resetProfileModels();
+    // Output list changed structurally or a Removed flag flipped
+    void refreshOutputs();
+    // Online, not removed outputs get their sessions polled
+    void updateWatchedSessions();
+    // Best output to show: Windows default, then any online, then any; never a removed one
+    [[nodiscard]] int firstVisibleOutput() const;
     void setCurrentOutputInternal(int index);
 
     [[nodiscard]] int indexOfOutput(const QString &outputId) const;
@@ -192,6 +216,7 @@ protected:
     int  currentOutput = -1;
     int  currentProfile = -1;
     bool isEditMode = false;
+    bool isShowingRemoved = false;
     bool isEditDirty = false;
 
     QTimer saveTimer;

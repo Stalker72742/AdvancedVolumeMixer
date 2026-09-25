@@ -1,4 +1,5 @@
-﻿cmake_minimum_required(VERSION 4.2)
+﻿# 3.21+ works (including the CMake bundled with the Qt installer), newer policies up to 4.2
+cmake_minimum_required(VERSION 3.21...4.2)
 set(PROJECT_NAME "AdvancedVolumeMixer")
 project(${PROJECT_NAME})
 
@@ -12,7 +13,38 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-set(CMAKE_PREFIX_PATH "D:/Qt/6.8.3/mingw_64")
+# ---- Where is Qt ----
+# AVM_QT_DIR is the Qt kit folder, e.g. C:/Qt/6.8.3/mingw_64. First match wins:
+#   1. -DAVM_QT_DIR=... (or an explicit -DCMAKE_PREFIX_PATH=...)
+#   2. QT_DIR=... line in build.local next to this file (git-ignored,
+#      build-release.bat writes it on the first run)
+#   3. QTDIR environment variable
+if(NOT AVM_QT_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/build.local")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/build.local" avm_local_qt REGEX "^QT_DIR=" LIMIT_COUNT 1)
+    if(avm_local_qt)
+        string(REGEX REPLACE "^QT_DIR=" "" avm_local_qt "${avm_local_qt}")
+        string(STRIP "${avm_local_qt}" avm_local_qt)
+        file(TO_CMAKE_PATH "${avm_local_qt}" AVM_QT_DIR)
+    endif()
+endif()
+if(NOT AVM_QT_DIR AND DEFINED ENV{QTDIR})
+    file(TO_CMAKE_PATH "$ENV{QTDIR}" AVM_QT_DIR)
+endif()
+set(AVM_QT_DIR "${AVM_QT_DIR}" CACHE PATH "Qt kit folder, e.g. C:/Qt/6.8.3/mingw_64")
+if(AVM_QT_DIR)
+    list(PREPEND CMAKE_PREFIX_PATH "${AVM_QT_DIR}")
+endif()
+
+find_package(Qt6 6.8 QUIET COMPONENTS Core)
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR
+        "Qt 6.8+ not found.\n"
+        "Point the build to your Qt kit folder (the one with bin/ and lib/cmake/Qt6), one of:\n"
+        "  - run build-release.bat, it asks once and remembers\n"
+        "  - cmake -DAVM_QT_DIR=C:/Qt/6.8.3/mingw_64 ...\n"
+        "  - put QT_DIR=C:/Qt/6.8.3/mingw_64 into build.local next to CMakeLists.txt\n"
+        "  - set the QTDIR environment variable")
+endif()
 
 find_package(Qt6 COMPONENTS
         Core
@@ -30,10 +62,15 @@ qt_policy(SET QTP0005 NEW)
 qt_standard_project_setup()
 
 # ---- Release optimizations ----
-# Must come before the targets: IPO is picked up when a target is created.
+# Tuned for MinGW (what the Qt installer ships). Other compilers just get
+# their default Release flags.
 include(CheckIPOSupported)
 check_ipo_supported(RESULT AVM_IPO_SUPPORTED OUTPUT AVM_IPO_ERROR LANGUAGES CXX)
-if(AVM_IPO_SUPPORTED)
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if(AVM_IPO_SUPPORTED)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    endif()
+elseif(AVM_IPO_SUPPORTED)
     # Manual -flto instead of CMAKE_INTERPROCEDURAL_OPTIMIZATION: CMake adds
     # -fno-fat-lto-objects, and then Qt's generated qml_register_types_*
     # symbols vanish from the static QML module libs at link time (MinGW ld
@@ -49,12 +86,14 @@ else()
     message(STATUS "LTO is not supported: ${AVM_IPO_ERROR}")
 endif()
 
-add_compile_options($<$<CONFIG:Release>:-O3>)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options($<$<CONFIG:Release>:-O3>)
+    # Strip symbols and drop unused sections
+    add_compile_options($<$<CONFIG:Release>:-ffunction-sections> $<$<CONFIG:Release>:-fdata-sections>)
+    add_link_options($<$<CONFIG:Release>:-s> $<$<CONFIG:Release>:-Wl,--gc-sections>)
+endif()
 # qDebug() compiles to nothing in Release, warnings stay
 add_compile_definitions($<$<CONFIG:Release>:QT_NO_DEBUG_OUTPUT>)
-# Strip symbols and drop unused sections
-add_compile_options($<$<CONFIG:Release>:-ffunction-sections> $<$<CONFIG:Release>:-fdata-sections>)
-add_link_options($<$<CONFIG:Release>:-s> $<$<CONFIG:Release>:-Wl,--gc-sections>)
 
 qt_add_library(AVMTheme STATIC)
 target_link_libraries(AVMTheme PRIVATE Qt6::Quick)
@@ -156,7 +195,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 qt_import_qml_plugins(${PROJECT_NAME})
 
-find_program(WINDEPLOYQT windeployqt HINTS "${CMAKE_PREFIX_PATH}/bin" REQUIRED)
+find_program(WINDEPLOYQT windeployqt HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" REQUIRED)
 
 set(AVM_WINDEPLOYQT_ARGS
         --qmldir "${CMAKE_SOURCE_DIR}/ui"
@@ -174,7 +213,7 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMENT "Deploying Qt runtime to the build dir"
 )
 
-# ---- Clean deploy: cmake --install <build> --prefix <dir> (see deploy.ps1) ----
+# ---- Clean deploy: cmake --install <build> --prefix <dir> (see build-release.bat) ----
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
 
 install(CODE "
@@ -199,7 +238,8 @@ install(CODE [[
         file(GLOB entries LIST_DIRECTORIES true "${dir}/*")
         foreach(entry IN LISTS entries)
             get_filename_component(name "${entry}" NAME)
-            if(IS_DIRECTORY "${entry}" AND NOT name IN_LIST ARGN)
+            list(FIND ARGN "${name}" keep) # not IN_LIST: install scripts run without policies
+            if(IS_DIRECTORY "${entry}" AND keep EQUAL -1)
                 file(REMOVE_RECURSE "${entry}")
             endif()
         endforeach()

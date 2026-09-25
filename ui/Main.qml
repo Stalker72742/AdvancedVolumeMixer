@@ -93,7 +93,9 @@ ApplicationWindow {
                     visible: Mixer.currentOutputIndex < 0
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    text: "Connect an audio output to start creating profiles"
+                    text: Mixer.removedCount > 0
+                          ? "All outputs are removed. Restore one from the Removed list on the left"
+                          : "Connect an audio output to start creating profiles"
                     color: Theme.textDisabled
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeNormal

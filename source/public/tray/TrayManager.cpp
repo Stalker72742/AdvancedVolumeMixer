@@ -177,7 +177,7 @@ void TrayManager::rebuildMenu()
     // Profiles of every online output; the Windows default output goes first
     QList<const AudioOutputData*> outputs;
     for (const auto& output : mixer->outputsData()) {
-        if (!output.Online)
+        if (!output.Online || output.Removed)
             continue;
         if (output.IsDefault)
             outputs.prepend(&output);
@@ -241,7 +241,7 @@ void TrayManager::updateToolTip()
 {
     QString text = QStringLiteral("Audio Profile Switcher");
     for (const auto& output : mixer->outputsData()) {
-        if (!output.IsDefault)
+        if (!output.IsDefault || output.Removed)
             continue;
         const int active = output.activeProfileIndex();
         if (active >= 0)

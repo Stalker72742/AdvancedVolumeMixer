@@ -53,4 +53,7 @@ QtObject {
     readonly property string iconMute: ""
     readonly property string iconSpeaker: ""
     readonly property string iconWarning: ""
+    readonly property string iconRestore: ""
+    readonly property string iconBack: ""
+    readonly property string iconHide: ""
 }

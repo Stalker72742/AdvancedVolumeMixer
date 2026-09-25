@@ -109,4 +109,11 @@ cmake-build-*/
 
 # IntelliJ build output
 out/
-build-release/*
+
+### Project
+# Local Qt path written by build-release.bat
+build.local
+# Release build + deploy output
+build-release/
+dist/
+AdvancedVolumeMixer.zip

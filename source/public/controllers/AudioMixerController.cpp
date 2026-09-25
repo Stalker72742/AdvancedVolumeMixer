@@ -49,15 +49,7 @@ AudioMixerController::AudioMixerController(QObject *parent)
     loadConfig();
     syncEndpoints();
 
-    // Start on the Windows default output, otherwise on the first online one
-    int initial = -1;
-    for (int i = 0; i < outputsList.size(); ++i) {
-        if (outputsList.at(i).IsDefault) { initial = i; break; }
-        if (initial < 0 && outputsList.at(i).Online) initial = i;
-    }
-    if (initial < 0 && !outputsList.isEmpty())
-        initial = 0;
-    setCurrentOutputInternal(initial);
+    setCurrentOutputInternal(firstVisibleOutput());
 
     registerHotkeys();
 }
@@ -152,35 +144,131 @@ VolumeProfileData* AudioMixerController::mutableCurrentProfile()
 
 void AudioMixerController::selectOutput(int index)
 {
-    if (index < 0 || index >= outputsList.size() || index == currentOutput)
+    if (index < 0 || index >= outputsList.size() || index == currentOutput || outputsList.at(index).Removed)
         return;
     setCurrentOutputInternal(index);
 }
 
-void AudioMixerController::forgetOutput(int index)
+void AudioMixerController::removeOutput(int index)
 {
-    if (index < 0 || index >= outputsList.size() || outputsList.at(index).Online)
+    if (isEditMode || index < 0 || index >= outputsList.size() || outputsList.at(index).Removed)
         return;
 
     const QString outputId = outputsList.at(index).OutputId;
+
+    // Apps we changed on this output go back to 100% before it stops being watched
+    sessions->applyProfile(outputId, VolumeProfileData{});
+
+    outputsList[index].Removed = true;
+    refreshOutputs();
+    updateWatchedSessions();
+
+    if (index == currentOutput)
+        setCurrentOutputInternal(firstVisibleOutput());
+
+    emit outputRemoved(outputId);
+    emit hotkeysChanged();
+    scheduleSave();
+}
+
+void AudioMixerController::restoreOutput(int index)
+{
+    if (isEditMode || index < 0 || index >= outputsList.size() || !outputsList.at(index).Removed)
+        return;
+
+    const QString outputId = outputsList.at(index).OutputId;
+    outputsList[index].Removed = false;
+
+    // Nothing left to show in the removed list: back to the regular one
+    if (removedCount() == 0 && isShowingRemoved) {
+        isShowingRemoved = false;
+        emit showRemovedChanged();
+    }
+
+    refreshOutputs();
+    updateWatchedSessions();
+
+    if (currentOutput < 0)
+        setCurrentOutputInternal(index);
+    if (outputsList.at(index).Online)
+        applyActiveProfile(outputId);
+
+    emit outputRestored(outputId);
+    emit hotkeysChanged();
+    scheduleSave();
+}
+
+void AudioMixerController::forgetOutput(int index)
+{
+    if (isEditMode || index < 0 || index >= outputsList.size())
+        return;
+    // Only removed + disconnected: an online device would pop right back as new
+    const auto &output = outputsList.at(index);
+    if (!output.Removed || output.Online)
+        return;
+
+    const QString outputId = output.OutputId;
     const QString selectedId = currentOutputData() ? currentOutputData()->OutputId : QString();
 
-    outputsModel->beginRemoveRows({}, index, index);
     outputsList.removeAt(index);
-    outputsModel->endRemoveRows();
+    if (removedCount() == 0 && isShowingRemoved) {
+        isShowingRemoved = false;
+        emit showRemovedChanged();
+    }
+    refreshOutputs();
 
-    int next = indexOfOutput(selectedId);
-    if (next < 0 && !outputsList.isEmpty())
-        next = qMin(index, static_cast<int>(outputsList.size()) - 1);
-    setCurrentOutputInternal(next);
+    // Indexes after the removed one shifted
+    const int selected = indexOfOutput(selectedId);
+    setCurrentOutputInternal(selected >= 0 ? selected : firstVisibleOutput());
 
     emit outputForgotten(outputId);
-    if (isEditMode) {
-        setEditDirty(true);
-    } else {
-        emit hotkeysChanged();
-        scheduleSave();
+    scheduleSave();
+}
+
+void AudioMixerController::setShowRemoved(bool show)
+{
+    if (isShowingRemoved == show)
+        return;
+    isShowingRemoved = show;
+    outputsModel->rebuild();
+    emit showRemovedChanged();
+}
+
+int AudioMixerController::removedCount() const
+{
+    return static_cast<int>(std::count_if(outputsList.cbegin(), outputsList.cend(),
+                                          [](const AudioOutputData &o) { return o.Removed; }));
+}
+
+void AudioMixerController::refreshOutputs()
+{
+    outputsModel->rebuild();
+    emit removedCountChanged();
+}
+
+void AudioMixerController::updateWatchedSessions()
+{
+    QStringList watchedIds;
+    for (const auto &output : std::as_const(outputsList)) {
+        if (output.Online && !output.Removed)
+            watchedIds.append(output.OutputId);
     }
+    sessions->setWatchedDevices(watchedIds);
+}
+
+int AudioMixerController::firstVisibleOutput() const
+{
+    int result = -1;
+    for (int i = 0; i < outputsList.size(); ++i) {
+        const auto &output = outputsList.at(i);
+        if (output.Removed)
+            continue;
+        if (output.IsDefault)
+            return i;
+        if (result < 0 || (output.Online && !outputsList.at(result).Online))
+            result = i;
+    }
+    return result;
 }
 
 void AudioMixerController::setCurrentOutputInternal(int index)
@@ -202,6 +290,7 @@ void AudioMixerController::syncEndpoints()
 
     QSet<QString> seen;
     bool needsSave = false;
+    bool structureChanged = false;
 
     for (const auto &endpoint : endpoints) {
         seen.insert(endpoint.id);
@@ -217,10 +306,8 @@ void AudioMixerController::syncEndpoints()
             output.Profiles.append(makeDefaultProfile());
             output.ActiveProfileId = output.Profiles.first().Id;
 
-            const int row = static_cast<int>(outputsList.size());
-            outputsModel->beginInsertRows({}, row, row);
             outputsList.append(output);
-            outputsModel->endInsertRows();
+            structureChanged = true;
 
             qDebug() << "New audio output:" << endpoint.name;
             emit outputAdded(endpoint.id, endpoint.name);
@@ -250,7 +337,7 @@ void AudioMixerController::syncEndpoints()
 
         if (!wasOnline) {
             emit outputConnected(output.OutputId);
-            if (!isEditMode)
+            if (!isEditMode && !output.Removed)
                 applyActiveProfile(output.OutputId);
         }
     }
@@ -270,20 +357,18 @@ void AudioMixerController::syncEndpoints()
             emit outputDisconnected(output.OutputId);
     }
 
-    if (currentOutput < 0 && !outputsList.isEmpty())
-        setCurrentOutputInternal(0);
+    if (structureChanged)
+        refreshOutputs();
+
+    if (currentOutput < 0)
+        setCurrentOutputInternal(firstVisibleOutput());
     else
         emit currentOutputChanged();
 
     if (needsSave)
         scheduleSave();
 
-    QStringList online;
-    for (const auto &output : std::as_const(outputsList)) {
-        if (output.Online)
-            online.append(output.OutputId);
-    }
-    sessions->setWatchedDevices(online);
+    updateWatchedSessions();
 }
 
 // ---- Profiles ----
@@ -593,6 +678,8 @@ void AudioMixerController::registerHotkeys()
 {
     QList<GlobalHotkeyManager::Binding> bindings;
     for (const auto &output : committedOutputs()) {
+        if (output.Removed)
+            continue;
         for (const auto &profile : output.Profiles) {
             if (!profile.Hotkey.isEmpty())
                 bindings.append({ output.OutputId + QLatin1Char('|') + profile.Id, profile.Hotkey });
@@ -661,7 +748,7 @@ void AudioMixerController::acceptEdit()
     saveConfig();
 
     for (const auto &output : std::as_const(outputsList)) {
-        if (output.Online)
+        if (output.Online && !output.Removed)
             applyActiveProfile(output.OutputId);
     }
     emit hotkeysChanged();
@@ -672,10 +759,9 @@ void AudioMixerController::cancelEdit()
     if (!isEditMode)
         return;
 
-    outputsModel->beginResetModel();
     outputsList = editSnapshot;
     editSnapshot.clear();
-    outputsModel->endResetModel();
+    refreshOutputs();
 
     finishEdit();
 
@@ -726,7 +812,7 @@ void AudioMixerController::applyActiveProfile(const QString &outputId)
     const auto &outputs = committedOutputs();
     const auto it = std::find_if(outputs.cbegin(), outputs.cend(),
                                  [&](const AudioOutputData &o) { return o.OutputId == outputId; });
-    if (it == outputs.cend() || it->activeProfileIndex() < 0)
+    if (it == outputs.cend() || it->Removed || it->activeProfileIndex() < 0)
         return;
 
     const auto &profile = it->Profiles.at(it->activeProfileIndex());
@@ -740,7 +826,7 @@ void AudioMixerController::pushRules(const QString &outputId)
     const auto &outputs = committedOutputs();
     const auto it = std::find_if(outputs.cbegin(), outputs.cend(),
                                  [&](const AudioOutputData &o) { return o.OutputId == outputId; });
-    if (it == outputs.cend() || it->activeProfileIndex() < 0)
+    if (it == outputs.cend() || it->Removed || it->activeProfileIndex() < 0)
         return;
 
     sessions->applyProfile(outputId, it->Profiles.at(it->activeProfileIndex()));
@@ -763,7 +849,6 @@ void AudioMixerController::loadConfig()
         return;
     }
 
-    outputsModel->beginResetModel();
     outputsList.clear();
     for (const auto &value : doc.object().value("outputs").toArray()) {
         auto output = AudioOutputData::fromJson(value.toObject());
@@ -777,7 +862,7 @@ void AudioMixerController::loadConfig()
 
         outputsList.append(output);
     }
-    outputsModel->endResetModel();
+    refreshOutputs();
 
     qDebug() << "Loaded" << outputsList.size() << "known outputs from" << configPath();
 }

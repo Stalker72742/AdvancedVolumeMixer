@@ -10,7 +10,11 @@
 class AudioMixerController;
 
 // Read-only view over AudioMixerController's outputs. All mutations go
-// through the controller, which drives begin/end* notifications.
+// through the controller, which drives the notifications.
+//
+// Filtered: shows either the regular outputs or the removed ones
+// (Mixer.showRemoved). The "idx" role is the index in the controller's
+// list, that's what Mixer.selectOutput()/removeOutput()/... take.
 class AudioOutputsModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -27,6 +31,7 @@ public:
         NameRole,
         OnlineRole,
         IsDefaultRole,
+        RemovedRole,
         ActiveProfileNameRole,
         ProfileCountRole
     };
@@ -47,7 +52,11 @@ protected:
 
     friend class AudioMixerController;
 
-    void notifyRowChanged(int row);
+    // Recomputes which outputs are shown; full reset, the list is tiny
+    void rebuild();
+    // sourceIndex = index in the controller's list
+    void notifyRowChanged(int sourceIndex);
 
     AudioMixerController* controller = nullptr;
+    QList<int> rows; // row -> controller index
 };
