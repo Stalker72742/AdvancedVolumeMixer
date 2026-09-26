@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import AdvancedVolumeMixer.ThemeModule
 
+// Horizontal strip of the current output's profiles.
 Item {
     id: root
 

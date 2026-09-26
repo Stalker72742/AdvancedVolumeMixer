@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import AdvancedVolumeMixer.ThemeModule
 
+// Custom title bar for the frameless window: drag area, minimize, close.
 Rectangle {
     id: root
     implicitHeight: Theme.titleBarHeight
@@ -9,12 +10,11 @@ Rectangle {
 
     property string title: "Audio Profile Switcher"
 
-    // Flip this once the C++ side actually has a QSystemTrayIcon alive.
-    // While false, the close button behaves like a normal window close.
+    // True when the tray icon is running: close hides to tray instead of quitting
     property bool trayModeEnabled: false
 
     signal minimizeRequested()
-    // toTray == true means "hide instead of terminating the process"
+    // toTray: hide the window instead of quitting
     signal closeRequested(bool toTray)
 
     // Drag-to-move region: whole bar minus the button cluster.

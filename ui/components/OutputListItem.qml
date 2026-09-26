@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// Row of the output list: name, status line and remove/restore/delete buttons.
 Rectangle {
     id: root
     property string outputName: ""

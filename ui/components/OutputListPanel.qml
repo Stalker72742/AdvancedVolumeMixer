@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// Left panel: known audio outputs, or the removed ones (Mixer.showRemoved).
 Rectangle {
     id: root
     color: Theme.bgSecondary

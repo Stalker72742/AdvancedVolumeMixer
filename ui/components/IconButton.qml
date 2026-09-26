@@ -1,6 +1,7 @@
 import QtQuick
 import AdvancedVolumeMixer.ThemeModule
 
+// Flat square button with a Segoe MDL2 icon glyph.
 Rectangle {
     id: root
     property string iconText: ""

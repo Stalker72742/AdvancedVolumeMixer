@@ -1,6 +1,7 @@
 import QtQuick
 import AdvancedVolumeMixer.ThemeModule
 
+// Profile tile in the profile strip, or the "New profile" tile.
 Rectangle {
     id: root
     property string profileName: ""

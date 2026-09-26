@@ -2,20 +2,16 @@ import QtQuick
 import QtQuick.Controls
 import AdvancedVolumeMixer.ThemeModule
 
-// Discord-style combo capture:
-//   - click to arm ("listening")
+// Hotkey capture field.
+//   - click to start listening
 //   - modifiers (Ctrl/Alt/Shift/Win) are only collected
-//   - pressing a regular key commits "modifiers + key" after commitDelayMs
-//   - releasing everything before that commits right away
-// Keys are named by scan code with US layout names, so the shown and
-// stored combo is the same whatever layout is active (Ь -> M).
-// Esc or losing focus cancels the capture.
-//
-// IMPORTANT: Qt's Keys.* only fires while this item has active focus,
-// so this can only ever capture a *local* combo suggestion. Making it
-// a real *global* hotkey (works while the app isn't focused) still
-// needs OS-level registration - RegisterHotKey / a low-level keyboard
-// hook - done on the C++ side (Mixer.hotkeysChanged).
+//   - a regular key commits "modifiers + key" after commitDelayMs,
+//     or right away when everything is released
+//   - Esc or losing focus cancels
+// Keys are named by scan code using US layout names, so the combo is the
+// same whatever keyboard layout is active.
+// This item only records the combo; global registration happens in C++
+// (GlobalHotkeyManager).
 Rectangle {
     id: root
 

@@ -1,12 +1,8 @@
 import QtQuick
 import AdvancedVolumeMixer.ThemeModule
 
-// Point 4: templates aren't tied to one process. A template just says
-// "this volume/mute state applies to <scope>", where scope is a single
-// process, a named group of processes, or every process tracked by the
-// current profile. Rules reference a template instead of hardcoding
-// their own scope+volume, so editing the template updates every rule
-// that uses it.
+// Rule scope switch: a single process, a group of processes ("a.exe; b.exe"),
+// or every process on the output. Emits scopeChanged("single"|"group"|"all").
 Row {
     id: root
     spacing: Theme.spacingSmall

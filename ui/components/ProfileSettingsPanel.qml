@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// Name and hotkey of the shown profile, Delete in edit mode.
 Item {
     id: root
     implicitHeight: layout.implicitHeight

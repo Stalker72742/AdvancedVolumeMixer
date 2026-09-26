@@ -45,6 +45,7 @@ protected:
 
     friend class AudioMixerController;
 
+    // Called by the controller after it changed the data
     void notifyRowChanged(int row);
     void notifyAllChanged();
 

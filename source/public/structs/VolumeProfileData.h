@@ -12,6 +12,7 @@
 #include <QStringList>
 #include <QUuid>
 
+// Volume/mute for one process, a group of processes or all of them
 struct ProcessRuleData
 {
     QString ProcessName;
@@ -88,6 +89,7 @@ struct ProcessRuleData
     }
 };
 
+// Named set of process rules for one output, optionally with a switch hotkey
 struct VolumeProfileData
 {
     QString                Id = QUuid::createUuid().toString(QUuid::WithoutBraces);

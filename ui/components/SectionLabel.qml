@@ -1,6 +1,7 @@
 import QtQuick
 import AdvancedVolumeMixer.ThemeModule
 
+// Small uppercase caption above a section or field.
 Text {
     color: Theme.textSecondary
     font.family: Theme.fontFamily

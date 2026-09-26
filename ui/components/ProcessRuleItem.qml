@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// One process rule: session status, name, volume slider, mute and remove.
 Rectangle {
     id: root
     color: Theme.bgSecondary
@@ -14,8 +15,8 @@ Rectangle {
     property string scope: "single"
     property real volume: 1.0
     property bool muted: false
-    // false => process hasn't opened an audio session yet; rule is
-    // kept but skipped at apply-time, and a log line is emitted instead.
+    // Process currently has an audio session on this output. When false the
+    // rule waits and is applied as soon as the process starts playing.
     property bool sessionActive: false
 
     signal volumeEdited(real value)

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// Dialog for adding a process rule to the shown profile.
 Popup {
     id: root
     modal: true

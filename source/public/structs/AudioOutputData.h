@@ -11,6 +11,7 @@
 
 #include "structs/VolumeProfileData.h"
 
+// Known audio output with its profiles, persisted in profiles.json
 struct AudioOutputData
 {
     QString                  OutputId;       // WASAPI endpoint ID, stable between reboots
@@ -26,6 +27,7 @@ struct AudioOutputData
     bool Online    = false;
     bool IsDefault = false;
 
+    // Index of the active profile, falls back to the first one
     [[nodiscard]] int activeProfileIndex() const
     {
         for (int i = 0; i < Profiles.size(); ++i) {

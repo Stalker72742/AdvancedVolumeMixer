@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import AdvancedVolumeMixer.ThemeModule
 
+// Process rules of the shown profile plus the "Add process rule" button.
 Item {
     id: root
 

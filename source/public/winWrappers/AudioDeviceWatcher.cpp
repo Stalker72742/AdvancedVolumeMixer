@@ -1,17 +1,12 @@
-﻿// Порядок инклудов тут принципиален для MinGW:
-// functiondiscoverykeys_devpkey.h использует PROPERTYKEY/REFPROPERTYKEY
-// и макрос EXTERN_C, которые объявляются в windows.h/propidl.h.
-// Поэтому AudioDeviceWatcher.h (тянущий mmdeviceapi.h -> windows.h)
-// должен быть подключен ПЕРВЫМ, а INITGUID-блок — уже после.
+﻿// Include order matters on MinGW: functiondiscoverykeys_devpkey.h needs
+// PROPERTYKEY and EXTERN_C from windows.h, which comes with our header
+// (via mmdeviceapi.h). So our header goes first, the INITGUID block after.
 #include "AudioDeviceWatcher.h"
 
-// INITGUID заставляет functiondiscoverykeys_devpkey.h не просто
-// объявить PKEY_* как extern, а реально определить их данные.
-// На MSVC эти символы приезжают из Propsys.lib, но в дистрибутивах
-// MinGW такого import-lib с данными нет — без INITGUID будет
-// "undefined reference to PKEY_Device_FriendlyName" на линковке.
-// Важно: определять только в ОДНОМ .cpp файле проекта, иначе
-// поймаешь multiple definition при инклуде из нескольких TU.
+// INITGUID makes the header define the PKEY_* data instead of declaring it
+// extern. MSVC gets them from Propsys.lib, MinGW has no such library and
+// fails with "undefined reference to PKEY_Device_FriendlyName".
+// Do this in one .cpp only, or the symbols get defined twice.
 #define INITGUID
 #include <functiondiscoverykeys_devpkey.h>
 #undef INITGUID
@@ -23,10 +18,8 @@
 AudioDeviceWatcher::AudioDeviceWatcher(QObject* parent)
     : QObject(parent)
 {
-    // Если у тебя уже есть CoInitializeEx где-то выше по стеку (обычно да,
-    // если это тот же поток, где живёт QApplication) — вызов ниже просто
-    // вернёт S_FALSE, это ок. Если инициализируешь тут впервые — не забудь
-    // CoUninitialize() в деструкторе (см. m_comInitializedHere).
+    // S_FALSE means COM is already initialized on this thread (usual for the
+    // GUI thread). Only balance with CoUninitialize() if we initialized it.
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     m_comInitializedHere = SUCCEEDED(hr) && hr != S_FALSE;
 
@@ -136,18 +129,15 @@ ULONG AudioDeviceWatcher::AddRef()
 
 ULONG AudioDeviceWatcher::Release()
 {
-    // Не удаляем this через delete — этот объект живёт как QObject
-    // и им владеет Qt (родитель/стек/умный указатель). Просто держим
-    // счётчик в адеквате для COM-контракта.
+    // Lifetime is owned by Qt (QObject parent), never delete this here.
+    // The counter only keeps the COM contract consistent.
     ULONG count = --m_refCount;
     return count;
 }
 
 // ---- IMMNotificationClient ----
-// ВАЖНО: эти методы вызываются COM-ом на служебном потоке, НЕ на твоём
-// Qt-потоке. Поэтому сигнал не эмиттим напрямую — прогоняем через
-// invokeMethod с QueuedConnection, чтобы слот выполнился в потоке,
-// которому принадлежит this (обычно main/GUI thread).
+// COM calls these on its own worker thread. Signals are re-emitted through
+// a queued invokeMethod so slots run on the thread that owns this object.
 
 void AudioDeviceWatcher::emitEndpointsChangedQueued()
 {
@@ -187,7 +177,7 @@ HRESULT AudioDeviceWatcher::OnDefaultDeviceChanged(EDataFlow flow, ERole role, L
 
 HRESULT AudioDeviceWatcher::OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY)
 {
-    // Переименование устройства и т.п. — тоже считаем изменением состава
+    // Renames and other property changes are treated as a list change too
     emitEndpointsChangedQueued();
     return S_OK;
 }

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import AdvancedVolumeMixer.ComponentsModule
 import AdvancedVolumeMixer.ThemeModule
 
+// Main window: title bar, output list on the left, profile page on the right.
 ApplicationWindow {
     id: window
     width: 980

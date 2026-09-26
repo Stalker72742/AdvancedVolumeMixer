@@ -32,6 +32,7 @@ namespace
         T* ptr = nullptr;
     };
 
+    // "Discord.exe" for a process id, empty if it can't be opened
     QString processNameForPid(DWORD pid)
     {
         if (pid == 0)

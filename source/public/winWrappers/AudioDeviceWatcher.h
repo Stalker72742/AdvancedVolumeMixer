@@ -8,22 +8,20 @@
 #include <mmdeviceapi.h>
 #include <atomic>
 
-// PKEY_Device_FriendlyName и т.п. НЕ инклюдим тут: functiondiscoverykeys_devpkey.h
-// подключается только в AudioDeviceWatcher.cpp вместе с INITGUID (см. комментарий
-// там). Если инклюднуть его тут без INITGUID, сработает собственный
-// include-guard системного заголовка, и повторный инклуд с INITGUID
-// в .cpp будет пропущен — реальные данные PKEY_* так и не сгенерятся,
-// и линковщик опять выдаст undefined reference.
+// Don't include functiondiscoverykeys_devpkey.h here: the .cpp includes it
+// with INITGUID to define the PKEY_* data. Including it earlier without
+// INITGUID would trip its include guard and the PKEY_* symbols would stay
+// undefined at link time.
 
 struct AudioOutputInfo
 {
-    QString id;           // endpoint ID (стабильный, можно хранить в конфиге)
-    QString name;         // friendly name ("Speakers (Realtek...)")
+    QString id;           // endpoint ID, stable across reboots (safe to store)
+    QString name;         // friendly name, e.g. "Speakers (Realtek...)"
     bool    isDefault = false;
 };
 
-// Реализует IMMNotificationClient, наружу отдаёт только Qt-сигналы.
-// COM-часть скрыта, юзать как обычный QObject.
+// Lists audio outputs and reports device changes as Qt signals.
+// Implements IMMNotificationClient internally, use it as a plain QObject.
 class AudioDeviceWatcher : public QObject, private IMMNotificationClient
 {
     Q_OBJECT
@@ -34,16 +32,15 @@ public:
     AudioDeviceWatcher(const AudioDeviceWatcher&) = delete;
     AudioDeviceWatcher& operator=(const AudioDeviceWatcher&) = delete;
 
-    // Синхронный снапшот текущих output-устройств (eRender, ACTIVE)
+    // Snapshot of the active output devices (eRender, DEVICE_STATE_ACTIVE)
     QList<AudioOutputInfo> enumerateOutputs() const;
 
 signals:
-    // Дергается при добавлении/удалении/смене состояния устройства.
-    // Один сигнал на любое изменение состава — этого обычно достаточно,
-    // дальше сам решаешь, вызывать ли enumerateOutputs() заново.
+    // Any device was added, removed, enabled/disabled or renamed.
+    // Call enumerateOutputs() again to get the new state.
     void endpointsChanged();
 
-    // Отдельно — смена дефолтного устройства вывода (полезно для UI)
+    // Windows default output (multimedia role) changed
     void defaultOutputChanged(const QString& newDefaultId);
 
 private:

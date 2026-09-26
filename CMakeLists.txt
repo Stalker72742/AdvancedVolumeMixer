@@ -133,7 +133,6 @@ qt_add_qml_module(AVMComponents
             ui/components/ProcessRuleItem.qml
             ui/components/AddProcessDialog.qml
             ui/components/TemplateSelector.qml
-            ui/components/TemplateEditor.qml
         SOURCES
             source/public/controllers/AudioMixerController.cpp
             source/public/controllers/AudioMixerController.h

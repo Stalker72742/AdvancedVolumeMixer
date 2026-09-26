@@ -47,6 +47,7 @@ signals:
     void sessionsAppeared(const QString& deviceId);
 
 protected:
+    // Enumerate sessions of watched devices, emit what changed
     void poll();
 
     // fn(IAudioSessionControl*, exeName, sessionInstanceId)
